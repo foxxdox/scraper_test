@@ -10,6 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    
+    strategy:
+      # Uruchamiamy miasta jedno po drugim, aby uniknąć konfliktów przy 'git push'
+      max-parallel: 1
+      matrix:
+        # Lista miast do obsłużenia - łatwo tu dodać nowe!
+        city: [lodz, krakow, wroclaw, warszawa, poznan]
 
     steps:
       - name: Checkout repo
@@ -23,16 +30,23 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run scraper
-        run: python scaper.py --city lodz --pages 8 --output data/ogloszenia_lodz.csv
+      # Tu dzieje się magia: ${{ matrix.city }} podstawi odpowiednie miasto z listy wyżej
+      - name: Run scraper for ${{ matrix.city }}
+        run: python scaper.py --city ${{ matrix.city }} --pages 10
 
       - name: Commit changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          git add -f data/*.csv
-          git commit -m "Update scraped data [$(date +'%Y-%m-%d %H:%M:%S')]" || echo "No changes to commit"
+          # Pobieramy najnowsze zmiany przed wysłaniem (dla bezpieczeństwa)
+          git pull --rebase --autostash
+          
+          # Dodajemy tylko plik dla aktualnego miasta
+          git add data/ogloszenia_${{ matrix.city }}.csv
+          
+          # Commitujemy i wysyłamy
+          git commit -m "Update data for ${{ matrix.city }} [$(date +'%Y-%m-%d')]" || echo "No changes to commit"
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
